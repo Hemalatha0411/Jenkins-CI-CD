@@ -1,29 +1,51 @@
 pipeline {
-    agent {
-        docker {
-            image 'abhishekf5/maven-abhishek-docker-agent:v1'
-            args '--user root -v /var/run/docker.sock:/var/run/docker.sock' // mount Docker socket to access the host's Docker daemon
+    agent any
+    
+    environment {
+        TOMCAT_USER = 'admin'  // Update with your Tomcat user
+        TOMCAT_PASSWORD = 'admin'  // Update with your Tomcat password
+        TOMCAT_URL = 'http://100.27.230.167:8080'  // Update with your Tomcat URL
+        WAR_FILE = 'target/*.war'  // Update with your WAR file name
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git 'https://github.com/Hemalatha0411/Jenkins-CI-CD.git'  // Update with your repo URL
+            }
+        }
+
+        stage('Build with Maven') {
+            steps {
+                sh 'mvn clean package -DskipTests'  // Skip tests if needed
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Deploy to Tomcat') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'tomcat-credentials', usernameVariable: 'TOMCAT_USER', passwordVariable: 'TOMCAT_PASSWORD')]) {
+                        sh """
+                            curl -u $TOMCAT_USER:$TOMCAT_PASSWORD --upload-file $WAR_FILE $TOMCAT_URL/manager/text/deploy?path=/your-app&update=true
+                        """
+                    }
+                }
+            }
         }
     }
-    stages {
-        stage('Checkout') {
-            steps {
-                sh 'echo passed'
-                git branch: 'main', url: 'https://github.com/Hemalatha0411/Jenkins-CI-CD.git'
-            }
+
+    post {
+        success {
+            echo 'Deployment Successful!'
         }
-        stage('Build and Test') {
-            steps {
-                sh 'ls -ltr'
-                /* build the project and create a JAR file */
-                sh 'cd java-maven-k8s/spring-boot-app && mvn clean package'
-            }
-        }
-        stage('Deploy') {
-            steps {
-                /* deploy war on tomcat server */
-                deploy adapters: [tomcat9(url: 'http://18.207.115.70:8080/', credentialsId: 'tomcat-credentials')], war: 'target/*.war', contextPath: 'pipeline-app'
-            }
+        failure {
+            echo 'Deployment Failed!'
         }
     }
 }
